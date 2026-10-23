@@ -1,0 +1,994 @@
+openapi: 3.1.0
+info:
+  title: Bilheteria Lab API
+  version: 1.0.0
+  description: >-
+    API de venda de ingressos para eventos. JSON em UTF-8. Valores monetários em centavos,
+    como inteiros. Datas e horas em ISO 8601 com offset; datas sem hora no formato AAAA-MM-DD.
+servers:
+  - url: /
+tags:
+  - name: health
+    description: Saúde do serviço
+  - name: auth
+    description: Cadastro e login
+  - name: events
+    description: Consulta de eventos
+  - name: orders
+    description: Pedidos do comprador
+  - name: admin
+    description: Operações de administração
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Verifica se a API está no ar
+      security: []
+      responses:
+        '200':
+          description: API disponível
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Cadastra um comprador
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Usuário cadastrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: 'E-mail ou CPF já cadastrado. Códigos: EMAIL_IN_USE, CPF_IN_USE.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 'Idade insuficiente para cadastro. Código: UNDERAGE_REGISTRATION.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Autentica por e-mail e senha
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login realizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: 'Credenciais inválidas. Código: INVALID_CREDENTIALS.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '423':
+          description: 'Login bloqueado. Código: LOGIN_LOCKED.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /events:
+    get:
+      tags: [events]
+      operationId: listEvents
+      summary: Lista os eventos
+      description: Todos os eventos, em qualquer situação, em ordem crescente de início.
+      security: []
+      responses:
+        '200':
+          description: Lista de eventos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventSummary'
+
+  /events/{id}:
+    get:
+      tags: [events]
+      operationId: getEvent
+      summary: Detalha um evento com seus setores
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Evento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders/quote:
+    post:
+      tags: [orders]
+      operationId: quoteOrder
+      summary: Calcula os valores de um pedido sem criá-lo
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+      responses:
+        '200':
+          description: Valores calculados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/OrderConflict'
+        '422':
+          $ref: '#/components/responses/OrderRejected'
+
+  /orders:
+    post:
+      tags: [orders]
+      operationId: createOrder
+      summary: Cria um pedido aguardando pagamento
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+      responses:
+        '201':
+          description: Pedido criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/OrderConflict'
+        '422':
+          $ref: '#/components/responses/OrderRejected'
+    get:
+      tags: [orders]
+      operationId: listOrders
+      summary: Lista os pedidos do comprador autenticado
+      description: Pedidos do comprador autenticado, dos mais recentes para os mais antigos.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de pedidos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /orders/{id}:
+    get:
+      tags: [orders]
+      operationId: getOrder
+      summary: Detalha um pedido
+      description: O comprador vê apenas os próprios pedidos; o administrador vê qualquer pedido.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Pedido encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders/{id}/payment:
+    post:
+      tags: [orders]
+      operationId: payOrder
+      summary: Paga um pedido com cartão de crédito
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Pagamento aprovado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: 'Pagamento recusado pela operadora. Código: PAYMENT_DECLINED.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            Pedido fora da situação que permite pagamento ou com prazo vencido.
+            Códigos: INVALID_ORDER_STATE, PAYMENT_EXPIRED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: >-
+            Cartão recusado na validação (CARD_INVALID), ou parcelamento não disponível para o
+            valor do pedido (INSTALLMENTS_NOT_ALLOWED). Erros de formato dos campos do cartão
+            e de installments respondem 400.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: 'Falha no processamento do pagamento. Código: PAYMENT_UNAVAILABLE.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/refund-quote:
+    get:
+      tags: [orders]
+      operationId: getRefundQuote
+      summary: Consulta se o pedido pode ser cancelado e o valor do reembolso
+      description: >-
+        Quando o cancelamento não é permitido, allowed é false e reason traz o código de erro
+        que o cancelamento devolveria. Pedido que não está PAID responde com allowed false,
+        refundAmount 0 e reason INVALID_ORDER_STATE.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Simulação de reembolso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundQuote'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders/{id}/cancel:
+    post:
+      tags: [orders]
+      operationId: cancelOrder
+      summary: Cancela um pedido
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Pedido cancelado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'Pedido fora da situação que permite cancelamento. Código: INVALID_ORDER_STATE.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: >-
+            Cancelamento não permitido para este pedido.
+            Códigos: CANCELLATION_WINDOW, TICKET_USED_CANCELLATION.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/events/{id}/cancel:
+    post:
+      tags: [admin]
+      operationId: cancelEvent
+      summary: Cancela um evento
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Evento cancelado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'O evento não pode mais ser cancelado. Código: EVENT_CANCEL_NOT_ALLOWED.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/tickets/{code}/check-in:
+    post:
+      tags: [admin]
+      operationId: checkInTicket
+      summary: Registra a entrada de um ingresso
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          description: Código do ingresso
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Entrada registrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'Ingresso já utilizado ou cancelado. Códigos: TICKET_ALREADY_USED, TICKET_CANCELED.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 'Entrada fora do período permitido. Código: CHECKIN_WINDOW.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/login-locks/unlock:
+    post:
+      tags: [admin]
+      operationId: unlockLogin
+      summary: Desbloqueia o login de um e-mail
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnlockRequest'
+      responses:
+        '204':
+          description: E-mail desbloqueado
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: 'Token obtido em POST /auth/login, enviado como Authorization: Bearer <token>.'
+
+  parameters:
+    EventId:
+      name: id
+      in: path
+      required: true
+      description: Identificador do evento
+      schema:
+        type: string
+        format: uuid
+    OrderId:
+      name: id
+      in: path
+      required: true
+      description: Identificador do pedido
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    ValidationError:
+      description: 'Dados inválidos. Código: VALIDATION_ERROR, com o detalhe por campo em fields.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: 'Sessão ausente, inválida ou expirada. Código: UNAUTHORIZED.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: 'Acesso restrito a administradores. Código: FORBIDDEN.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: 'Recurso não encontrado. Código: NOT_FOUND.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    OrderConflict:
+      description: 'Ingressos indisponíveis. Códigos: HALF_PRICE_QUOTA, SOLD_OUT.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    OrderRejected:
+      description: >-
+        Pedido recusado. Códigos: SALES_NOT_OPEN, AGE_RESTRICTED, ORDER_QUANTITY_LIMIT,
+        BUYER_LIMIT, COUPON_INVALID, COUPON_EXPIRED, COUPON_EXHAUSTED, COUPON_MIN_AMOUNT,
+        COUPON_NOT_APPLICABLE.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    Role:
+      type: string
+      enum: [BUYER, ADMIN]
+
+    AgeRating:
+      type: string
+      description: Classificação etária. L é livre para todas as idades.
+      enum: ['L', '10', '12', '14', '16', '18']
+
+    SalesStatus:
+      type: string
+      enum: [CANCELED, HELD, SALES_CLOSED, UPCOMING, SOLD_OUT, ON_SALE]
+
+    TicketType:
+      type: string
+      description: FULL para inteira, HALF para meia-entrada.
+      enum: [FULL, HALF]
+
+    HalfPriceCategory:
+      type: string
+      enum: [STUDENT, SENIOR, DISABLED, LOW_INCOME_YOUTH]
+
+    OrderStatus:
+      type: string
+      enum: [AWAITING_PAYMENT, PAID, FAILED, EXPIRED, CANCELED, REFUNDED]
+
+    TicketStatus:
+      type: string
+      enum: [VALID, USED, CANCELED]
+
+    RegisterRequest:
+      type: object
+      required: [name, email, cpf, birthDate, password]
+      properties:
+        name:
+          type: string
+          description: Nome completo.
+        email:
+          type: string
+          description: E-mail.
+        cpf:
+          type: string
+          description: CPF.
+        birthDate:
+          type: string
+          format: date
+          description: Data de nascimento.
+        password:
+          type: string
+          description: Senha.
+          writeOnly: true
+
+    User:
+      type: object
+      required: [id, name, email, cpf, birthDate, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+        cpf:
+          type: string
+        birthDate:
+          type: string
+          format: date
+        role:
+          $ref: '#/components/schemas/Role'
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          description: E-mail.
+        password:
+          type: string
+          description: Senha.
+          writeOnly: true
+
+    LoginResponse:
+      type: object
+      required: [token, expiresAt, user]
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/User'
+
+    UnlockRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          description: E-mail a desbloquear.
+
+    EventSummary:
+      type: object
+      required: [id, name, venue, startsAt, ageRating, salesStatus, minPrice]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        venue:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        ageRating:
+          $ref: '#/components/schemas/AgeRating'
+        salesStatus:
+          $ref: '#/components/schemas/SalesStatus'
+        minPrice:
+          type: integer
+          minimum: 0
+          description: Menor preço de inteira entre os setores, em centavos.
+
+    EventDetail:
+      allOf:
+        - $ref: '#/components/schemas/EventSummary'
+        - type: object
+          required: [salesOpenOn, description, sectors]
+          properties:
+            salesOpenOn:
+              type: string
+              format: date
+              description: Data de abertura das vendas.
+            description:
+              type: string
+            sectors:
+              type: array
+              items:
+                $ref: '#/components/schemas/Sector'
+
+    Sector:
+      type: object
+      required: [id, name, fullPrice, halfPrice, capacity, available, halfAvailable]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        fullPrice:
+          type: integer
+          minimum: 0
+          description: Preço da inteira, em centavos.
+        halfPrice:
+          type: integer
+          minimum: 0
+          description: Preço da meia-entrada, em centavos.
+        capacity:
+          type: integer
+          minimum: 0
+        available:
+          type: integer
+          minimum: 0
+          description: Ingressos ainda disponíveis no setor.
+        halfAvailable:
+          type: integer
+          minimum: 0
+          description: Meias-entradas ainda disponíveis no setor, limitadas por available.
+
+    OrderItemRequest:
+      type: object
+      description: halfPriceCategory é obrigatório em HALF e não é aceito em FULL.
+      required: [sectorId, type, quantity]
+      properties:
+        sectorId:
+          type: string
+          format: uuid
+          description: Setor do evento do pedido.
+        type:
+          $ref: '#/components/schemas/TicketType'
+        halfPriceCategory:
+          $ref: '#/components/schemas/HalfPriceCategory'
+        quantity:
+          type: integer
+          minimum: 1
+      if:
+        properties:
+          type:
+            const: HALF
+        required: [type]
+      then:
+        required: [halfPriceCategory]
+      else:
+        not:
+          required: [halfPriceCategory]
+
+    OrderRequest:
+      type: object
+      required: [eventId, items]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        couponCode:
+          type: string
+          description: Código do cupom, opcional.
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderItemRequest'
+
+    OrderItem:
+      type: object
+      required: [sectorId, type, halfPriceCategory, quantity, unitPrice, lineTotal]
+      properties:
+        sectorId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/TicketType'
+        halfPriceCategory:
+          description: Categoria da meia-entrada; null em FULL.
+          oneOf:
+            - $ref: '#/components/schemas/HalfPriceCategory'
+            - type: 'null'
+        quantity:
+          type: integer
+          minimum: 1
+        unitPrice:
+          type: integer
+          minimum: 0
+          description: Preço unitário, em centavos.
+        lineTotal:
+          type: integer
+          minimum: 0
+          description: Preço unitário multiplicado pela quantidade, em centavos.
+
+    Quote:
+      type: object
+      required: [items, subtotal, discount, serviceFee, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        subtotal:
+          type: integer
+          minimum: 0
+          description: Em centavos.
+        discount:
+          type: integer
+          minimum: 0
+          description: Em centavos.
+        serviceFee:
+          type: integer
+          minimum: 0
+          description: Em centavos.
+        total:
+          type: integer
+          minimum: 0
+          description: Em centavos.
+
+    Ticket:
+      type: object
+      required: [code, sectorId, type, status]
+      properties:
+        code:
+          type: string
+        sectorId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/TicketType'
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+
+    Order:
+      type: object
+      description: Todos os campos estão sempre presentes; os que não têm valor vêm null.
+      required:
+        - id
+        - eventId
+        - status
+        - items
+        - couponCode
+        - subtotal
+        - discount
+        - serviceFee
+        - total
+        - paymentDeadline
+        - paymentAttempts
+        - paidAt
+        - cardLast4
+        - installments
+        - refundAmount
+        - tickets
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        eventId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        couponCode:
+          type: [string, 'null']
+        subtotal:
+          type: integer
+          minimum: 0
+          description: Em centavos.
+        discount:
+          type: integer
+          minimum: 0
+          description: Em centavos.
+        serviceFee:
+          type: integer
+          minimum: 0
+          description: Em centavos.
+        total:
+          type: integer
+          minimum: 0
+          description: Em centavos.
+        paymentDeadline:
+          type: string
+          format: date-time
+        paymentAttempts:
+          type: integer
+          minimum: 0
+        paidAt:
+          type: [string, 'null']
+          format: date-time
+        cardLast4:
+          type: [string, 'null']
+          pattern: '^\d{4}$'
+          description: Últimos dígitos do cartão usado no pagamento.
+        installments:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 3
+        refundAmount:
+          type: [integer, 'null']
+          minimum: 0
+          description: Valor reembolsado, em centavos.
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
+        createdAt:
+          type: string
+          format: date-time
+
+    Card:
+      type: object
+      required: [number, holderName, expiry, cvv]
+      properties:
+        number:
+          type: string
+          description: Número do cartão.
+          writeOnly: true
+        holderName:
+          type: string
+          description: Nome do titular.
+        expiry:
+          type: string
+          description: Validade no formato MM/AA.
+          pattern: '^(0[1-9]|1[0-2])/\d{2}$'
+        cvv:
+          type: string
+          description: Código de segurança.
+          writeOnly: true
+
+    PaymentRequest:
+      type: object
+      required: [installments, card]
+      properties:
+        installments:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: Número de parcelas sem juros.
+        card:
+          $ref: '#/components/schemas/Card'
+      example:
+        installments: 1
+        card:
+          number: '4111111111111111'
+          holderName: ANA SOUZA
+          expiry: 12/28
+          cvv: '123'
+
+    RefundQuote:
+      type: object
+      required: [allowed, refundAmount, reason]
+      properties:
+        allowed:
+          type: boolean
+          description: Indica se o pedido pode ser cancelado agora.
+        refundAmount:
+          type: integer
+          minimum: 0
+          description: Valor que seria reembolsado, em centavos.
+        reason:
+          description: Código de erro que o cancelamento devolveria; null quando allowed é true.
+          oneOf:
+            - type: string
+              enum: [CANCELLATION_WINDOW, TICKET_USED_CANCELLATION, INVALID_ORDER_STATE]
+            - type: 'null'
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - UNAUTHORIZED
+                - INVALID_CREDENTIALS
+                - FORBIDDEN
+                - NOT_FOUND
+                - EMAIL_IN_USE
+                - CPF_IN_USE
+                - UNDERAGE_REGISTRATION
+                - LOGIN_LOCKED
+                - SALES_NOT_OPEN
+                - AGE_RESTRICTED
+                - ORDER_QUANTITY_LIMIT
+                - BUYER_LIMIT
+                - COUPON_INVALID
+                - COUPON_EXPIRED
+                - COUPON_EXHAUSTED
+                - COUPON_MIN_AMOUNT
+                - COUPON_NOT_APPLICABLE
+                - HALF_PRICE_QUOTA
+                - SOLD_OUT
+                - CARD_INVALID
+                - INSTALLMENTS_NOT_ALLOWED
+                - PAYMENT_DECLINED
+                - PAYMENT_UNAVAILABLE
+                - PAYMENT_EXPIRED
+                - INVALID_ORDER_STATE
+                - CANCELLATION_WINDOW
+                - TICKET_USED_CANCELLATION
+                - EVENT_CANCEL_NOT_ALLOWED
+                - CHECKIN_WINDOW
+                - TICKET_ALREADY_USED
+                - TICKET_CANCELED
+            message:
+              type: string
+            fields:
+              type: object
+              description: Mensagem por campo inválido. Presente apenas em VALIDATION_ERROR.
+              additionalProperties:
+                type: string
