@@ -49,5 +49,20 @@ services:
       timeout: 3s
       retries: 30
 
+  web:
+    build: ./web
+    environment:
+      API_URL: ${API_URL:-http://localhost:3001}
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
   db-data:
