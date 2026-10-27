@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build e verificação de saúde
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configura o Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            api/package-lock.json
+            mock-gateway/package-lock.json
+
+      - name: Instala dependências da API
+        working-directory: api
+        run: npm ci
+
+      - name: Compila a API
+        working-directory: api
+        run: npm run build
+
+      - name: Instala dependências do gateway simulado
+        working-directory: mock-gateway
+        run: npm ci
+
+      - name: Compila o gateway simulado
+        working-directory: mock-gateway
+        run: npm run build
+
+      - name: Valida a imagem do front
+        run: docker build ./web
+
+      - name: Sobe a aplicação
+        run: docker compose up -d --build
+
+      - name: Espera a API e o front responderem
+        timeout-minutes: 5
+        run: |
+          wait_for() {
+            url="$1"
+            for _ in $(seq 1 60); do
+              status=$(curl -s -o /dev/null -w '%{http_code}' "$url" || true)
+              if [ "$status" = "200" ]; then
+                echo "$url respondeu 200"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "$url não respondeu 200 a tempo (último status: $status)"
+            return 1
+          }
+          wait_for http://localhost:3001/health
+          wait_for http://localhost:3000/
+
+      - name: Mostra o estado dos containers
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color
+
+      - name: Derruba a aplicação
+        if: always()
+        run: docker compose down -v
