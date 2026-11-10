@@ -19,6 +19,7 @@ paga com cartão. O projeto tem três partes:
 | `web/` | front web |
 | `mock-gateway/` | gateway de pagamento simulado |
 | `docs/backlog.md` | histórias do backlog |
+| `tests/` | testes automatizados de API, de front e de desempenho |
 | `docker-compose.yml` | banco, API, front e gateway simulado |
 | `.env.example` | variáveis de ambiente com os valores de desenvolvimento |
 
@@ -62,6 +63,35 @@ docker compose exec api npm run seed
 O comando apaga os dados do banco e carrega de novo os dados iniciais. As datas desses dados são
 relativas ao dia em que o comando roda, então convém rodá-lo no mesmo dia em que a aplicação for
 usada.
+
+## Testes automatizados
+
+Os testes ficam em `tests/`: `tests/api` (API, com Playwright), `tests/e2e` (front, com
+Playwright no Chromium) e `tests/perf` (desempenho, com k6). Precisam de Node.js 22 e da
+aplicação no ar com os dados iniciais recriados.
+
+```sh
+npm ci
+npx playwright install chromium
+docker compose exec api npm run seed
+npm test
+```
+
+`npm run test:api` e `npm run test:e2e` rodam só uma das partes; `npm run report` abre o
+relatório da última execução.
+
+Os testes de desempenho rodam com a imagem do k6, na rede do docker compose:
+
+```sh
+docker run --rm -i --network bilheteria-lab_default -e API_URL=http://api:3001 grafana/k6:1.3.0 run - < tests/perf/consulta.js
+docker run --rm -i --network bilheteria-lab_default -e API_URL=http://api:3001 grafana/k6:1.3.0 run - < tests/perf/concorrencia.js
+```
+
+O de compras simultâneas esgota a Plateia de O Último Ato: recrie os dados iniciais antes de
+usar a aplicação de novo.
+
+No CI, o job "Testes automatizados" roda a mesma suíte e guarda o relatório do Playwright por
+3 dias.
 
 ## Dados de teste
 
