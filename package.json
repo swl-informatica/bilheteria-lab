@@ -1,0 +1,14 @@
+{
+  "name": "bilheteria-tests",
+  "private": true,
+  "description": "Testes automatizados da bilheteria",
+  "scripts": {
+    "test": "playwright test",
+    "test:api": "playwright test --project=api",
+    "test:e2e": "playwright test --project=e2e",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1"
+  }
+}

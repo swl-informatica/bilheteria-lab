@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -75,6 +76,80 @@ jobs:
 
       - name: Mostra o estado dos containers
         if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color
+
+      - name: Derruba a aplicação
+        if: always()
+        run: docker compose down -v
+
+  tests:
+    name: Testes automatizados
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configura o Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instala dependências dos testes
+        run: npm ci
+
+      - name: Instala o Chromium do Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Sobe a aplicação
+        run: docker compose up -d --build
+
+      - name: Espera a API e o front responderem
+        id: health
+        timeout-minutes: 5
+        run: |
+          wait_for() {
+            url="$1"
+            for _ in $(seq 1 60); do
+              status=$(curl -s -o /dev/null -w '%{http_code}' "$url" || true)
+              if [ "$status" = "200" ]; then
+                echo "$url respondeu 200"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "$url não respondeu 200 a tempo (último status: $status)"
+            return 1
+          }
+          wait_for http://localhost:3001/health
+          wait_for http://localhost:3000/
+
+      - name: Testes de API e de navegador
+        run: npx playwright test
+
+      - name: Publica o relatório do Playwright
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 3
+
+      - name: Teste de carga de consulta
+        if: ${{ !cancelled() }}
+        run: docker run --rm -i --network bilheteria-lab_default -e API_URL=http://api:3001 grafana/k6:1.3.0 run - < tests/perf/consulta.js
+
+      - name: Teste de compras simultâneas
+        if: ${{ !cancelled() }}
+        run: docker run --rm -i --network bilheteria-lab_default -e API_URL=http://api:3001 grafana/k6:1.3.0 run - < tests/perf/concorrencia.js
+
+      - name: Mostra o estado dos containers
+        if: failure() && steps.health.outcome == 'failure'
         run: |
           docker compose ps
           docker compose logs --no-color
