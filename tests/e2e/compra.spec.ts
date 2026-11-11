@@ -15,7 +15,7 @@ test.describe('US04 Compra de ingressos', () => {
 
     const plateia = page.getByTestId('sector-row').filter({ hasText: 'Plateia' });
     await plateia.getByLabel('Quantidade de inteira').fill('1');
-    await expect(page.getByTestId('order-total')).toBeVisible();
+    await expect(page.getByTestId('summary-item')).toHaveCount(1);
     await page.getByRole('button', { name: 'Reservar' }).click();
 
     await expect(page).toHaveURL(/\/orders\/[0-9a-f-]+\/pay$/);
