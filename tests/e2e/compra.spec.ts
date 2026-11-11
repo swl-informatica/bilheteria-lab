@@ -30,7 +30,7 @@ test.describe('US04 Compra de ingressos', () => {
     await expect(page.getByTestId('order-total')).toHaveText('R$ 18,00');
 
     await gramado.getByLabel('Quantidade de inteira').fill('3');
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(290);
     const total = await page.getByTestId('order-total').textContent();
     expect(total).toBe('R$ 49,50');
   });
