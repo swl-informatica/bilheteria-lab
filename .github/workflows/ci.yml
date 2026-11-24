@@ -130,7 +130,7 @@ jobs:
           wait_for http://localhost:3000/
 
       - name: Testes de API e de navegador
-        run: npx playwright test
+        run: npx playwright test --shuffle
 
       - name: Publica o relatório do Playwright
         if: ${{ !cancelled() }}
