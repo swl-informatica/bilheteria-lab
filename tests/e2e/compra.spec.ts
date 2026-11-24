@@ -15,7 +15,7 @@ test.describe('US04 Compra de ingressos', () => {
 
     const plateia = page.getByTestId('sector-row').filter({ hasText: 'Plateia' });
     await plateia.getByLabel('Quantidade de inteira').fill('1');
-    await expect(page.getByTestId('order-total')).toBeVisible();
+    await expect(page.getByTestId('summary-item')).toHaveCount(1);
     await page.getByRole('button', { name: 'Reservar' }).click();
 
     await expect(page).toHaveURL(/\/orders\/[0-9a-f-]+\/pay$/);
@@ -30,7 +30,7 @@ test.describe('US04 Compra de ingressos', () => {
     await expect(page.getByTestId('order-total')).toHaveText('R$ 18,00');
 
     await gramado.getByLabel('Quantidade de inteira').fill('3');
-    await page.waitForTimeout(340);
+    await page.waitForTimeout(270);
     const total = await page.getByTestId('order-total').textContent();
     expect(total).toBe('R$ 49,50');
   });
